@@ -1,4 +1,4 @@
-# 52-54
+# 55
 # データからロジスティック回帰モデルの学習を行う。
 
 import pandas as pd
@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
+from lion_pytorch import Lion
 
 x_train = pd.read_csv("train.feature.txt", sep="\t", skiprows=1)
 x_valid = pd.read_csv("valid.feature.txt", sep="\t", skiprows=1)
@@ -53,10 +54,10 @@ if(__name__ == "__main__"):
 
     LR_RATE = 0.01
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=LR_RATE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LR_RATE)
 
     loss_history = []
-    EPOCH_SIZE = 1000
+    EPOCH_SIZE = 200
     for epoch in range(EPOCH_SIZE):
         total_loss = 0
         for x, y in train_loader:
@@ -71,27 +72,53 @@ if(__name__ == "__main__"):
         if(epoch+1) % (EPOCH_SIZE / 10) == 0:
             print(epoch+1, total_loss)
 
+    from torcheval.metrics.functional import multiclass_confusion_matrix
+
     # テスト
-    correct = 0
+    confusion_matrix = torch.zeros((4, 4))
     total = 0
     for x, y in test_loader:
         outputs = model(x)
         _, predicted = torch.max(outputs.data, 1)
-        total += y.size(0)
-        correct += (predicted == y).sum().item()
-    print("正解率: ", int(correct)/total*100)
+        confusion_matrix += multiclass_confusion_matrix(predicted, y, 4)
+    # 評価値
+    precision = torch.diag(confusion_matrix) / torch.sum(confusion_matrix, 1)
+    recall = torch.diag(confusion_matrix) / torch.sum(confusion_matrix, 0)
+    f1 = 2 * (precision * recall) / (precision + recall)
+    print("適合率: ", precision)
+    print("再現率: ", recall)
+    print("f1値: ", f1)
+    # マクロ平均
+    macro_precision = torch.sum(precision) / precision.size()[0]
+    macro_recall = torch.sum(recall) / precision.size()[0]
+    print("マクロ適合率: ", macro_precision)
+    print("マクロ再現率: ", macro_recall)
+    # マイクロ平均
+    micro_precision = torch.sum(torch.diag(confusion_matrix)) / torch.sum(confusion_matrix)
+    micro_recall = torch.sum(torch.diag(confusion_matrix)) / (torch.sum(confusion_matrix) * 2 - torch.sum(torch.diag(confusion_matrix)))
+    print("マイクロ適合率: ", micro_precision)
+    print("マイクロ再現率: ", micro_recall)
+
+    torch.save(model.state_dict(), "model_weight.pth")
+
+
 
 """
-100 89.08755666017532
-200 80.93800610303879
-300 74.85991317033768
-400 70.2554087638855
-500 66.41260224580765
-600 63.29986137151718
-700 60.47723615169525
-800 58.08216828107834
-900 55.93459928035736
-1000 54.01588225364685
-正解率:  79.60255824577432
-
+20 16.306080237030983
+40 7.4807649329304695
+60 4.486931506544352
+80 2.9214055901393294
+100 2.0464605195447803
+120 1.4845075435005128
+140 1.1249250040855259
+160 0.8729966653045267
+180 0.7139246792066842
+200 0.59419992583571
+適合率:  tensor([0.9983, 0.9927, 0.9988, 0.9935])
+再現率:  tensor([0.9977, 0.9937, 0.9981, 1.0000])
+f1値:  tensor([0.9980, 0.9932, 0.9984, 0.9967])
+マクロ適合率:  tensor(0.9958)
+マクロ再現率:  tensor(0.9974)
+マイクロ適合率:  tensor(0.9976)
+マイクロ再現率:  tensor(0.9952)
 """

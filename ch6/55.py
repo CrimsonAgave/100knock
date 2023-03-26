@@ -1,4 +1,4 @@
-# 52-54
+# 55
 # データからロジスティック回帰モデルの学習を行う。
 
 import pandas as pd
@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
+from lion_pytorch import Lion
 
 x_train = pd.read_csv("train.feature.txt", sep="\t", skiprows=1)
 x_valid = pd.read_csv("valid.feature.txt", sep="\t", skiprows=1)
@@ -48,15 +49,15 @@ class LogisticRegression(torch.nn.Module):
         return x
     
 if(__name__ == "__main__"):
-    output_dim, input_dim = x_train.shape
-    model = LogisticRegression(input_dim, output_dim)
+    _, input_dim = x_train.shape
+    model = LogisticRegression(input_dim, 4)
 
     LR_RATE = 0.01
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR_RATE)
+    optimizer = torch.optim.SGD(model.parameters(), lr=LR_RATE)
 
     loss_history = []
-    EPOCH_SIZE = 20
+    EPOCH_SIZE = 1000
     for epoch in range(EPOCH_SIZE):
         total_loss = 0
         for x, y in train_loader:
@@ -68,16 +69,35 @@ if(__name__ == "__main__"):
 
             total_loss += loss.item()
         loss_history.append(total_loss)
-        if(epoch+1) % 2 == 0:
+        if(epoch+1) % (EPOCH_SIZE / 10) == 0:
             print(epoch+1, total_loss)
 
+    from torcheval.metrics.functional import multiclass_confusion_matrix
+
     # テスト
-    correct = 0
+    confusion_matrix = torch.zeros((4, 4))
     total = 0
     for x, y in test_loader:
         outputs = model(x)
         _, predicted = torch.max(outputs.data, 1)
-        total += y.size(0)
-        correct += (predicted == y).sum().item()
-    print("正解率: ", int(correct)/total*100)
+        confusion_matrix += multiclass_confusion_matrix(predicted, y, 4)
+    print("混同行列: \n", confusion_matrix)
 
+
+"""
+100 88.94790810346603
+200 80.78200912475586
+300 74.87582755088806
+400 70.23887461423874
+500 66.34749853610992
+600 63.17522543668747
+700 60.45865374803543
+800 58.080418795347214
+900 55.93127906322479
+1000 54.011738538742065
+混同行列:
+ tensor([[2.6360e+03, 7.0000e+00, 3.6900e+02, 0.0000e+00],      
+        [2.9100e+02, 1.6500e+02, 5.0000e+02, 0.0000e+00],       
+        [6.1000e+01, 1.0000e+00, 4.1140e+03, 0.0000e+00],       
+        [1.3000e+02, 3.0000e+00, 4.2600e+02, 5.3000e+01]])      
+"""
